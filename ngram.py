@@ -5,7 +5,7 @@
 #          Daniel Blanchard <dblanchard@ets.org>
 # URL: <http://www.nltk.org/>
 # For license information, see LICENSE.TXT
-
+from collections import Generator
 from itertools import chain
 from math import log
 
@@ -81,6 +81,8 @@ class NgramModel(ModelI):
         assert (isinstance(pad_left, bool))
         assert (isinstance(pad_right, bool))
 
+        print(f"Building model with n = {n}...")
+
         self._n = n
         self._lpad = ('',) * (n - 1) if pad_left else ()
         self._rpad = ('',) * (n - 1) if pad_right else ()
@@ -91,8 +93,12 @@ class NgramModel(ModelI):
         cfd = ConditionalFreqDist()
         self._ngrams = set()
 
+        train_orig = train
+        if callable(train):
+            train = train()
+
         # If given a list of strings instead of a list of lists, create enclosing list
-        if (train is not None) and isinstance(train[0], str):
+        if (train is not None) and not isinstance(train, Generator) and isinstance(train[0], str):
             train = [train]
 
         for sent in train:
@@ -109,7 +115,7 @@ class NgramModel(ModelI):
 
         # recursively construct the lower-order models
         if n > 1:
-            self._backoff = NgramModel(n - 1, train, pad_left, pad_right,
+            self._backoff = NgramModel(n - 1, train_orig, pad_left, pad_right,
                                        estimator, *estimator_args, **estimator_kwargs)
 
     def prob(self, word, context):
@@ -196,13 +202,17 @@ class NgramModel(ModelI):
         :type text: list(str)
         """
 
+        e = self.logprob_text(text)
+        return e / float(len(text) - (self._n - 1))
+
+    def logprob_text(self, text):
         e = 0.0
         text = list(self._lpad) + text + list(self._rpad)
         for i in range(self._n - 1, len(text)):
             context = tuple(text[i - self._n + 1:i])
             token = text[i]
             e += self.logprob(token, context)
-        return e / float(len(text) - (self._n - 1))
+        return e
 
     def perplexity(self, text):
         """
