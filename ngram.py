@@ -101,14 +101,6 @@ class NgramModel(ModelI):
         if (train is not None) and not isinstance(train, Generator) and isinstance(train[0], str):
             train = [train]
 
-        # recursively construct the lower-order models
-        if n > 1:
-            from multiprocessing.pool import ThreadPool
-            pool = ThreadPool(processes=1)
-
-            async_backoff_model = pool.apply_async(NgramModel, (n - 1, train_orig, pad_left, pad_right,
-                                       estimator, estimator_args, estimator_kwargs))
-
         for sent in train:
             for ngram in ingrams(chain(self._lpad, sent, self._rpad), n):
                 self._ngrams.add(ngram)
@@ -121,9 +113,10 @@ class NgramModel(ModelI):
         else:
             self._model = ConditionalProbDist(cfd, estimator, *estimator_args, **estimator_kwargs)
 
+        # recursively construct the lower-order models
         if n > 1:
-            self._backoff = async_backoff_model.get()
-
+            self._backoff = NgramModel(n - 1, train_orig, pad_left, pad_right,
+                                       estimator, *estimator_args, **estimator_kwargs)
 
     def prob(self, word, context):
         """
