@@ -6,7 +6,6 @@
 # URL: <http://www.nltk.org/>
 # For license information, see LICENSE.TXT
 from collections import Generator
-from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 from math import log
 
@@ -104,9 +103,11 @@ class NgramModel(ModelI):
 
         # recursively construct the lower-order models
         if n > 1:
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                future_backoff_model = executor.submit(NgramModel, n - 1, train_orig, pad_left, pad_right,
-                                       estimator, *estimator_args, **estimator_kwargs)
+            from multiprocessing.pool import ThreadPool
+            pool = ThreadPool(processes=1)
+
+            async_backoff_model = pool.apply_async(NgramModel, (n - 1, train_orig, pad_left, pad_right,
+                                       estimator, estimator_args, estimator_kwargs))
 
         for sent in train:
             for ngram in ingrams(chain(self._lpad, sent, self._rpad), n):
@@ -121,7 +122,7 @@ class NgramModel(ModelI):
             self._model = ConditionalProbDist(cfd, estimator, *estimator_args, **estimator_kwargs)
 
         if n > 1:
-            self._backoff = future_backoff_model.result()
+            self._backoff = async_backoff_model.get()
 
 
     def prob(self, word, context):
